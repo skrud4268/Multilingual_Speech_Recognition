@@ -33,108 +33,54 @@ The goal of this project is to develop a speech recognition system that can clas
 
 2.  **Fine-Tuning the Model:**
 
-        File: `Multilingual.ipynb`
+    File: `Multilingual.ipynb`
 
-        - Utilizes the audio files and labels from the `segments` folder for model training.
-        - Installation of required packages:
+    - Utilizes the audio files and labels from the `segments` folder for model training.
+    - Installation of required packages:
 
-          ```bash
-          pip install accelerate -U
-          pip3 install datasets
-          ```
+      ```bash
+      pip install accelerate -U
+      pip3 install datasets
+      ```
 
-        - Important imports:
+    - Important imports:
 
-          ```python
-          import torch
-          from transformers import AutoProcessor, Wav2Vec2ForSequenceClassification, TrainingArguments, Trainer
-          from datasets import Dataset, DatasetDict, load_metric
-          import librosa
-          import pandas as pd
-          from sklearn.model_selection import train_test_split
-          ```
+      ```python
+      import torch
+      from transformers import AutoProcessor, Wav2Vec2ForSequenceClassification, TrainingArguments, Trainer
+      from datasets import Dataset, DatasetDict, load_metric
+      import librosa
+      import pandas as pd
+      from sklearn.model_selection import train_test_split
+      ```
 
-        - Load data, map data and load model
+    - Load the CSV File and Create a Mapping Dictionary:
 
-        - Preprocess audio files
+      - A CSV file, presumably containing filenames and their corresponding language labels, is loaded into a pandas DataFrame.
+      - A dictionary (file_label_map) is created to map filenames to their respective language labels.
 
-        ```
-        # Function to load and preprocess the audio file using librosa
+    - Define a Function to Map Label Text to Integer:
 
-        def preprocess_data(batch):
-        batch_input_values = []
-        batch_labels = []
+      - A dictionary (label_to_id) is defined to map language labels (in this case, "English" and "Korean") to integer values. This is a common practice in machine learning to handle categorical data.
 
-        for file_path in batch["file"]:
-            # Read audio file with librosa
-            audio_input, sr = librosa.load(file_path, sr=16_000)
-            # Process audio file
-            inputs = processor(audio_input, sampling_rate=sr, return_tensors="pt", padding=True)
-            batch_input_values.append(inputs.input_values.squeeze().numpy())
-            batch_labels.append(label_to_id[file_label_map[file_path.split("/")[-1]]])
-        batch["input_values"] = batch_input_values
-        batch["labels"] = batch_labels
-        return batch
-        ```
+    - Load Model and Processor:
 
-        - Prepare and split dataset
+      - A processor (AutoProcessor) and a model (Wav2Vec2ForSequenceClassification) are loaded from Hugging Face's model hub.
+      - The processor is specific to the facebook/wav2vec2-base model, which is a popular choice for audio processing tasks.
+      - The model is also loaded from the facebook/wav2vec2-base but is configured for sequence classification with two labels (as indicated by num_labels=2).
 
-        ```
-        # Prepare dataset paths
+    - Preprocess Audio Files: A function is defined to load and preprocess audio files using librosa. It reads audio files, processes them with a specified processor, and prepares input values and labels for each file.
 
-        audio_files = df['Filename'].tolist()
-        audio_files = ['segments/' + file for file in audio_files] # Ensure correct path formation
-
-        # Split dataset into training and validation
-
-        train_files, val_files = train_test_split(audio_files, test_size=0.2, random_state=42)
-        train_df = pd.DataFrame(train_files, columns=['file'])
-        val_df = pd.DataFrame(val_files, columns=['file'])
-        ```
-
-        - Convert DataFrames to Datasets and Apply Preprocessing
-
-        ```
-        # Convert DataFrames to Hugging Face Datasets
-        train_dataset = Dataset.from_pandas(train_df)
-        val_dataset = Dataset.from_pandas(val_df)
-
-        # Apply preprocessing
-        train_dataset = train_dataset.map(preprocess_data, batched=True)
-        val_dataset = val_dataset.map(preprocess_data, batched=True)
-
-        # Create a DatasetDict
-        dataset_dict = DatasetDict({
-            'train': train_dataset,
-            'validation': val_dataset
-        })
-        ```
-
-        - Define Training Arguments and Initialize Trainer
-
-        ```
-        # Define training arguments
-        training_args = TrainingArguments(
-            output_dir="./wav2vec2-language-classification",
-            per_device_train_batch_size=2,  # Keeping the small batch size
-            gradient_accumulation_steps=2,  # Adjusted accumulation steps
-            evaluation_strategy="epoch",
-            num_train_epochs=30,  # Keeping the increased epochs
-            save_steps=500,
-            eval_steps=250,  # Keeping more frequent evaluation
-            learning_rate=3e-5,  # Further reduced learning rate
-            weight_decay=0.02,  # Adjusted weight decay
-        )
-
-        # Initialize Trainer
-        trainer = Trainer(
-            model=model,
-            args=training_args,
-            train_dataset=dataset_dict['train'],
-            eval_dataset=dataset_dict['validation'],
-            tokenizer=processor.feature_extractor,
-        )
-        ```
+    - Prepare and Split Dataset:
+      - The dataset paths are prepared by appending a directory prefix to filenames.
+      - The dataset is split into training and validation sets using train_test_split, with 20% of data reserved for validation.
+    - Convert DataFrames to Datasets and Apply Preprocessing:
+      - DataFrames containing file paths for training and validation sets are converted to Hugging Face Datasets.
+      - The preprocessing function is applied to these datasets in a batched manner.
+      - A DatasetDict is created containing both the training and validation datasets.
+    - Define Training Arguments and Initialize Trainer:
+      - Training arguments are defined with specific settings for batch size, gradient accumulation, evaluation strategy, number of epochs, saving and evaluation steps, learning rate, and weight decay.
+      - A Trainer is initialized with the model, training arguments, datasets, and tokenizer/feature extractor.
 
 3.  **Model Evaluation:**
 
