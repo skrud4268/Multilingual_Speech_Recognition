@@ -31,7 +31,7 @@ The goal of this project is to develop a speech recognition system that can clas
     - Each segment is labeled as either English or Korean, and a CSV file containing the segment audio file names and their corresponding labels is generated.
     - The individual segment audio files are merged with a 400-millisecond pause between them to form sentence audio files, which are stored in the `sentences` folder.
 
-    Files: `Koreanfood_data.py`, `englishfood_data.py`, `koreanhobby_data.py`
+    Files: `koreanfood_data.py`, `englishfood_data.py`, `koreanhobby_data.py`, `englishhobby_data.py`
 
     - These scripts are used to generate datasets that supplement the main dataset, particularly when it's challenging to create sentences with more than one language using sentence_to_word.py.
     - Each of these files generates sentences in a simple format, where the dominant language contains a single word from the non-dominant language.
