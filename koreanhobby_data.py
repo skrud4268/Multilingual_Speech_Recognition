@@ -3,48 +3,19 @@ import os
 import csv
 from pydub import AudioSegment
 
+def text_to_aiff_to_wav(text, filename, voice):
+    # Convert text to aiff file using macOS say command
+    aiff_file = f"{filename}.aiff"
+    subprocess.run(['say', '-v', voice, '-o', aiff_file, text])
 
-def text_to_aiff_to_wav(text, wav_filename, voice, folder='wav_files3', pause_duration=0.5):
-    if not os.path.exists(folder):
-        os.makedirs(folder)
+    # Convert aiff file to wav file
+    AudioSegment.from_file(aiff_file).export(filename, format="wav")
 
-    # Convert text to speech and save as AIFF
-    aiff_filename = os.path.join(folder, wav_filename.replace('.wav', '.aiff'))
-    command = ['say', '-v', voice, '-o', aiff_filename, text]
-    subprocess.run(command)
+    # Clean up the aiff file
+    os.remove(aiff_file)
 
-    # Convert AIFF to WAV
-    wav_filepath = os.path.join(folder, wav_filename)
-    subprocess.run(['ffmpeg', '-i', aiff_filename, wav_filepath])
-
-    # Remove AIFF file
-    os.remove(aiff_filename)
-
-    # Add pause
-    if pause_duration > 0:
-        add_pause_to_wav(wav_filepath, pause_duration)
-
-
-def add_pause_to_wav(wav_file, duration_seconds):
-    silence = AudioSegment.silent(duration=duration_seconds * 400)
-    sound = AudioSegment.from_wav(wav_file)
-    combined = sound + silence
-    combined.export(wav_file, format='wav')
-
-
-def combine_wav_files(files, output_file, folder='wav_files3'):
-    combined = AudioSegment.empty()
-    for file in files:
-        wav_path = os.path.join(folder, file)
-        combined += AudioSegment.from_wav(wav_path)
-
-    combined.export(os.path.join(folder, output_file), format='wav')
-
-
-# English words
-english_words = ["is", "my", "favorite", "hobby"]
-for word in english_words:
-    text_to_aiff_to_wav(word, f"{word}.wav", "Samantha")
+# English phrase
+english_phrase = "is my hobby"
 
 # Korean hobbys
 korean_hobbies = [
@@ -59,34 +30,50 @@ korean_hobbies = [
     "서예", "종이 접기", "도예", "조각", "가죽 공예", "목공", "금속 공예", "유리 공예", "캔들 만들기", "비누 만들기", "와인 시음", "커피 감별", "스케이트보딩", "자동차 튜닝", "드론 레이싱", "스페이스 모델링", "VR 체험", "퀼트 만들기", "저글링", "킥복싱"
 ]
 
-for index, hobby in enumerate(korean_hobbies, start=1):
-    text_to_aiff_to_wav(hobby, f"korean_hobby_{index}.wav", "Yuna")
+# Ensure the segments and sentences folder exists
+os.makedirs('segments', exist_ok=True)
+os.makedirs('sentences', exist_ok=True)
 
-# Generate combined sentences and CSV entries
-csv_entries = []
+# List to store CSV data
+csv_data = []
 
-# Add entries for English words
-for word in english_words:
-    csv_entries.append([f"{word}.wav", 'English', word])
+# Silent segment of 400 milliseconds
+silent_segment = AudioSegment.silent(duration=400)
 
-# Add entries for Korean hobbys
-for index, hobby in enumerate(korean_hobbies, start=1):
-    csv_entries.append([f"korean_hobby_{index}.wav", 'Korean', hobby])
+# Process each Korean hobbies
+for index, hobby in enumerate(korean_hobbies):
+    # Create the full sentence
+    sentence = f"{english_phrase} {hobby}"
+    
+    # Split the sentence into words
+    words = sentence.split()
 
-# Generate and add entries for combined sentences
-for index, hobby in enumerate(korean_hobbies, start=1):
-    combined_filename = f"korean_hobby_sentence_{index}.wav"
-    files = [f"korean_hobby_{index}.wav"] + \
-        [f"{word}.wav" for word in english_words]
-    combine_wav_files(files, combined_filename)
-    combined_sentence = hobby + " ".join(english_words) + " "
-    csv_entries.append([combined_filename, 'Mixed', combined_sentence])
+    # Initialize an empty audio segment for the sentence
+    sentence_audio = AudioSegment.empty()
 
-# Write to CSV
-with open('wav_labels3.csv', 'w', newline='') as file:
+    # Process each word
+    for word_index, word in enumerate(words):
+        filename = f"segments/korean_hobby_{index+1}_chunk_{word_index+1}.wav"
+        text_to_aiff_to_wav(word, filename, "Yuna")
+
+        # Load the word audio
+        word_audio = AudioSegment.from_wav(filename)
+
+        # Concatenate word audio to the sentence audio
+        sentence_audio += word_audio + silent_segment
+
+        # Determine the language of the word
+        language = "English" if word in english_phrase else "Korean"
+
+        # Add filename and language to CSV data
+        csv_data.append([filename, language])
+
+    # Export the sentence audio
+    sentence_audio.export(f"sentences/korean_hobby_sentence_{index+1}.wav", format="wav")
+
+# Write data to CSV file
+with open('korean_hobby_labels.csv', mode='w', newline='', encoding='utf-8') as file:
     writer = csv.writer(file)
-    writer.writerow(['Filename', 'Language', 'Text'])
-    for entry in csv_entries:
-        writer.writerow(entry)
+    writer.writerow(["Filename", "Language"])
+    writer.writerows(csv_data)
 
-print("Dataset creation and CSV file generation completed.")

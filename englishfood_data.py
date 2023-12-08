@@ -3,66 +3,22 @@ import os
 import csv
 from pydub import AudioSegment
 
+def text_to_aiff_to_wav(text, filename, voice):
+    # Convert text to aiff file using macOS say command
+    aiff_file = f"{filename}.aiff"
+    subprocess.run(['say', '-v', voice, '-o', aiff_file, text])
 
-def text_to_aiff_to_wav(text, wav_filename, voice, folder='wav_files2', pause_duration=0.5):
-    if not os.path.exists(folder):
-        os.makedirs(folder)
+    # Convert aiff file to wav file
+    AudioSegment.from_file(aiff_file).export(filename, format="wav")
 
-    # Convert text to speech and save as AIFF
-    aiff_filename = os.path.join(folder, wav_filename.replace('.wav', '.aiff'))
-    command = ['say', '-v', voice, '-o', aiff_filename, text]
-    subprocess.run(command)
-
-    # Convert AIFF to WAV
-    wav_filepath = os.path.join(folder, wav_filename)
-    subprocess.run(['ffmpeg', '-i', aiff_filename, '-ar',
-                   '22050', '-ac', '1', wav_filepath])
-
-    # Remove the AIFF file
-    os.remove(aiff_filename)
-
-    # Add pause
-    if pause_duration > 0:
-        add_pause_to_wav(wav_filepath, pause_duration)
-
-
-def add_pause_to_wav(wav_file, duration_seconds):
-    silence = AudioSegment.silent(duration=duration_seconds * 400)
-    sound = AudioSegment.from_wav(wav_file)
-    combined = sound + silence
-    combined.export(wav_file, format='wav')
-
+    # Clean up the aiff file
+    os.remove(aiff_file)
 
 def is_last_letter_vowel(word):
-    vowels = "aeiou"
+    vowels = "aeiouAEIOU"
     return word[-1] in vowels
 
-
-def combine_wav_files(files, output_file, folder='wav_files2'):
-    combined = AudioSegment.empty()
-    for file in files:
-        wav_path = os.path.join(folder, file)
-        combined += AudioSegment.from_wav(wav_path)
-
-    combined.export(os.path.join(folder, output_file), format='wav')
-
-
-# Korean words with English descriptions
-korean_entries = []
-korean_words = {
-    "나는": "naneun",
-    "을": "eul",
-    "를": "reul",
-    "좋아합니다": "joahapnida"
-}
-for korean_word, english_desc in korean_words.items():
-    wav_filename = f"{english_desc}.wav"
-    text_to_aiff_to_wav(korean_word, wav_filename,
-                        voice='Yuna', pause_duration=0.5)
-    korean_entries.append([wav_filename, 'Korean', korean_word])
-
 # English food names
-english_entries = []
 english_foods = [
     "Pizza", "Hamburger", "Pasta", "Sushi", "Taco", "Salad", "Steak", "Curry", "Bagel", "Bread",
     "Apple Pie", "Roast Beef", "Fried Chicken", "Fish and Chips", "Bacon and Eggs", "Pancakes", "Waffles", "Burrito", "Lasagna", "Spaghetti Bolognese",
@@ -75,30 +31,51 @@ english_foods = [
     "Trifle", "Eton Mess", "Sticky Toffee Pudding", "Spotted Dick", "Bread and Butter Pudding", "Victoria Sponge Cake", "Scone", "Shortbread", "Crumpet", "Tea Sandwich",  "Deviled Eggs", "Cobb Salad", "Monte Cristo Sandwich", "Chicken Parmesan", "Ratatouille",
     "Beef Stroganoff", "Chili Con Carne", "Eggplant Parmesan", "New England Clam Chowder", "Tiramisu"
 ]
-for food in english_foods:
-    wav_filename = f"{food}.wav"
-    text_to_aiff_to_wav(food, wav_filename,
-                        voice='Samantha', pause_duration=0.5)
-    english_entries.append([wav_filename, 'English', food])
 
-# Generate combined sentences
-combined_entries = []
-counter = 1
-for food in english_foods:
-    object_particle = "reul" if is_last_letter_vowel(food) else "eul"
+# Ensure the segments folder exists
+os.makedirs('segments', exist_ok=True)
+os.makedirs('sentences', exist_ok=True)
+
+# Initialize a list to store chunk labels
+csv_data = []
+
+# Silent segment of 400 milliseconds
+silent_segment = AudioSegment.silent(duration=400)
+
+# Generate combined sentences and process each segment
+for index, food in enumerate(english_foods):
+    object_particle = "를" if is_last_letter_vowel(food) else "을"
     combined_text = f"나는 {food} {object_particle} 좋아합니다"
-    combined_filename = f"englishfood_sentence_{counter}.wav"
-    files = ["naneun.wav", f"{food}.wav",
-             f"{object_particle}.wav", "joahapnida.wav"]
-    combine_wav_files(files, combined_filename)
-    combined_entries.append([combined_filename, 'Mixed', combined_text])
-    counter += 1
+    segments = combined_text.split()
 
-# Write to CSV
-with open('wav_labels2.csv', mode='w', newline='') as file:
+    # Initialize an empty audio segment for the sentence
+    sentence_audio = AudioSegment.empty()
+    
+    # Process each segment
+    for segment_index, segment in enumerate(segments):
+        filename = f"segments/english_food_{index+1}_chunk_{segment_index+1}.wav"
+        text_to_aiff_to_wav(segment, filename, "Yuna")
+
+        # Load the word audio
+        word_audio = AudioSegment.from_wav(filename)
+
+        # Concatenate word audio to the sentence audio
+        sentence_audio += word_audio + silent_segment
+        
+        # Determine if the segment is English or Korean and append the label to the list
+        if segment.encode('utf-8').isalpha():
+            language = "English"
+        else:
+            language = "Korean"
+        
+        # Add filename and language to CSV data
+        csv_data.append([filename, language])
+
+    # Export the sentence audio
+    sentence_audio.export(f"sentences/english_food_sentence_{index+1}.wav", format="wav")
+
+# Write data to CSV file
+with open('english_food_labels.csv', mode='w', newline='', encoding='utf-8') as file:
     writer = csv.writer(file)
-    writer.writerow(['Filename', 'Language', 'Text'])
-    for entry in korean_entries + english_entries + combined_entries:
-        writer.writerow(entry)
-
-print("WAV files and CSV generated.")
+    writer.writerow(["Filename", "Language"])
+    writer.writerows(csv_data)

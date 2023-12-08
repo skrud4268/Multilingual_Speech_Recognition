@@ -3,48 +3,19 @@ import os
 import csv
 from pydub import AudioSegment
 
+def text_to_aiff_to_wav(text, filename, voice):
+    # Convert text to aiff file using macOS say command
+    aiff_file = f"{filename}.aiff"
+    subprocess.run(['say', '-v', voice, '-o', aiff_file, text])
 
-def text_to_aiff_to_wav(text, wav_filename, voice, folder='wav_files', pause_duration=0.5):
-    if not os.path.exists(folder):
-        os.makedirs(folder)
+    # Convert aiff file to wav file
+    AudioSegment.from_file(aiff_file).export(filename, format="wav")
 
-    # Convert text to speech and save as AIFF
-    aiff_filename = os.path.join(folder, wav_filename.replace('.wav', '.aiff'))
-    command = ['say', '-v', voice, '-o', aiff_filename, text]
-    subprocess.run(command)
+    # Clean up the aiff file
+    os.remove(aiff_file)
 
-    # Convert AIFF to WAV
-    wav_filepath = os.path.join(folder, wav_filename)
-    subprocess.run(['ffmpeg', '-i', aiff_filename, wav_filepath])
-
-    # Remove AIFF file
-    os.remove(aiff_filename)
-
-    # Add pause
-    if pause_duration > 0:
-        add_pause_to_wav(wav_filepath, pause_duration)
-
-
-def add_pause_to_wav(wav_file, duration_seconds):
-    silence = AudioSegment.silent(duration=duration_seconds * 400)
-    sound = AudioSegment.from_wav(wav_file)
-    combined = sound + silence
-    combined.export(wav_file, format='wav')
-
-
-def combine_wav_files(files, output_file, folder='wav_files'):
-    combined = AudioSegment.empty()
-    for file in files:
-        wav_path = os.path.join(folder, file)
-        combined += AudioSegment.from_wav(wav_path)
-
-    combined.export(os.path.join(folder, output_file), format='wav')
-
-
-# English words
-english_words = ["i", "like", "to", "eat"]
-for word in english_words:
-    text_to_aiff_to_wav(word, f"{word}.wav", "Samantha")
+# English phrase
+english_phrase = "i like to eat"
 
 # Korean foods
 korean_foods = [
@@ -58,34 +29,51 @@ korean_foods = [
     "찜닭", "족발", "보쌈", "막걸리", "소주", "매실주", "동동주", "인삼주", "배추김치", "갓김치",
     "깻잎김치", "총각김치", "갈치구이", "갈치조림", "고등어조림", "아귀찜", "아귀탕", "대구탕", "황태구이", "홍어삼합", "배추된장국", "두부조림", "마늘종볶음", "멸치국수", "오징어볶음밥", "양념치킨", "간장게장", "양배추김치", "떡만두국", "김치만두"
 ]
-for index, food in enumerate(korean_foods, start=1):
-    text_to_aiff_to_wav(food, f"korean_food_{index}.wav", "Yuna")
 
-# Generate combined sentences and CSV entries
-csv_entries = []
+# Ensure the segments and sentences folder exists
+os.makedirs('segments', exist_ok=True)
+os.makedirs('sentences', exist_ok=True)
 
-# Add entries for English words
-for word in english_words:
-    csv_entries.append([f"{word}.wav", 'English', word])
+# List to store CSV data
+csv_data = []
 
-# Add entries for Korean foods
-for index, food in enumerate(korean_foods, start=1):
-    csv_entries.append([f"korean_food_{index}.wav", 'Korean', food])
+# Silent segment of 400 milliseconds
+silent_segment = AudioSegment.silent(duration=400)
 
-# Generate and add entries for combined sentences
-for index, food in enumerate(korean_foods, start=1):
-    combined_filename = f"I_like_to_eat_korean_food_{index}.wav"
-    files = [f"{word}.wav" for word in english_words] + \
-        [f"korean_food_{index}.wav"]
-    combine_wav_files(files, combined_filename)
-    combined_sentence = " ".join(english_words) + " " + food
-    csv_entries.append([combined_filename, 'Mixed', combined_sentence])
+# Process each Korean food
+for index, food in enumerate(korean_foods):
+    # Create the full sentence
+    sentence = f"{english_phrase} {food}"
+    
+    # Split the sentence into words
+    words = sentence.split()
 
-# Write to CSV
-with open('audio_segments.csv', 'w', newline='') as file:
+    # Initialize an empty audio segment for the sentence
+    sentence_audio = AudioSegment.empty()
+
+    # Process each word
+    for word_index, word in enumerate(words):
+        filename = f"segments/korean_food_{index+1}_chunk_{word_index+1}.wav"
+        text_to_aiff_to_wav(word, filename, "Yuna")
+
+        # Load the word audio
+        word_audio = AudioSegment.from_wav(filename)
+
+        # Concatenate word audio to the sentence audio
+        sentence_audio += word_audio + silent_segment
+
+        # Determine the language of the word
+        language = "English" if word in english_phrase else "Korean"
+
+        # Add filename and language to CSV data
+        csv_data.append([filename, language])
+
+    # Export the sentence audio
+    sentence_audio.export(f"sentences/korean_food_sentence_{index+1}.wav", format="wav")
+
+# Write data to CSV file
+with open('korean_food_labels.csv', mode='w', newline='', encoding='utf-8') as file:
     writer = csv.writer(file)
-    writer.writerow(['Filename', 'Language', 'Text'])
-    for entry in csv_entries:
-        writer.writerow(entry)
+    writer.writerow(["Filename", "Language"])
+    writer.writerows(csv_data)
 
-print("Dataset creation and CSV file generation completed.")
